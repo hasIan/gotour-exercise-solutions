@@ -29,7 +29,7 @@ func (g *Greeting) ServeHTTP(
 func main() {
     http.Handle("/string", String("Wh00p Wh00p"))
     http.Handle("/struct", &Greeting{
-        "Hello", ":", "Gophers!"
+        "Hello", ":", "Gophers!",
     })
     http.ListenAndServe("localhost:4000", nil)
 }
