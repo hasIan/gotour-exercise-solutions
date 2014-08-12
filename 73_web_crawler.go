@@ -4,9 +4,8 @@ package main
 
 import (
 	"fmt"
+	"sync"
 )
-
-var pr = fmt.Println
 
 type Fetcher interface {
 	// Fetch returns the body of URL and
@@ -17,67 +16,68 @@ type Fetcher interface {
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
 func Crawl(url string, depth int, fetcher Fetcher) {
-	visited := make(map[string]bool)
-	finished := make(chan bool)
-
-	// TODO: Fetch URLs in parallel.
-	// TODO: Don't fetch the same URL twice.
-	// This implementation doesn't do either:
-
-	finished <- true
-	go doCrawl(url, depth, fetcher, visited, finished)
-	<-finished
-
+	state := newState()
+	defer state.close()
+	go doCrawl(url, depth, fetcher, state)
+	state.wait()
+	fmt.Println("Finished crawling", url)
 }
 
-func doCrawl(
-	url string,
-	depth int,
-	fetcher Fetcher,
-	visited map[string]bool,
-	finished chan bool) {
+type state struct {
+	mu       *sync.RWMutex
+	visited  map[string]struct{}
+	finishCh chan struct{}
+}
 
-	if depth <= 0 {
+func newState() *state {
+	return &state{
+		mu:       new(sync.RWMutex),
+		visited:  make(map[string]struct{}),
+		finishCh: make(chan struct{}),
+	}
+}
+
+func (s *state) isVisited(url string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, exists := s.visited[url]
+	return exists
+}
+
+func (s *state) finish(url string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.visited[url] = struct{}{}
+	s.finishCh <- struct{}{}
+}
+
+func (s *state) wait() {
+	<-s.finishCh
+}
+
+func (s *state) close() {
+	close(s.finishCh)
+}
+
+func doCrawl(url string, depth int, fetcher Fetcher, state *state) {
+	defer state.finish(url)
+	if depth <= 0 || state.isVisited(url) {
 		return
 	}
-
-	if visited[url] {
-		return
-	}
-
 	body, urls, err := fetcher.Fetch(url)
-	visited[url] = true
-
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
 	fmt.Printf("found: %s %q\n", url, body)
-
 	inflight := 0
-	inflightChan := make(chan bool)
-
 	for _, u := range urls {
 		inflight++
-		go doCrawl(u, depth-1, fetcher, visited, inflightChan)
+		go doCrawl(u, depth-1, fetcher, state)
 	}
-
 	for ; inflight > 0; inflight-- {
-		<-inflightChan
+		state.wait()
 	}
-
-	finished <- true
-}
-
-func alreadyVisited(candidateUrl string, visited []string) bool {
-	for _, url := range visited {
-		if url == candidateUrl {
-			return true
-		}
-	}
-
-	return false
 }
 
 func main() {
