@@ -1,5 +1,3 @@
-// This is broken; I hate this exercise; it's a double-black diamond.
-
 package main
 
 import (
