@@ -17,25 +17,25 @@ type Fetcher interface {
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
 func Crawl(url string, depth int, fetcher Fetcher) {
-	visited  := make(map[string]bool)
-    finished := make(chan bool)
+	visited := make(map[string]bool)
+	finished := make(chan bool)
 
 	// TODO: Fetch URLs in parallel.
 	// TODO: Don't fetch the same URL twice.
 	// This implementation doesn't do either:
 
-    finished <- true
-    go doCrawl(url, depth, fetcher, visited, finished)
-    <- finished
+	finished <- true
+	go doCrawl(url, depth, fetcher, visited, finished)
+	<-finished
 
 }
 
 func doCrawl(
-    url string,
-    depth int,
-    fetcher Fetcher,
-    visited map[string]bool,
-    finished chan bool) {
+	url string,
+	depth int,
+	fetcher Fetcher,
+	visited map[string]bool,
+	finished chan bool) {
 
 	if depth <= 0 {
 		return
@@ -55,19 +55,19 @@ func doCrawl(
 
 	fmt.Printf("found: %s %q\n", url, body)
 
-    inflight := 0
-    inflightChan := make(chan bool)
+	inflight := 0
+	inflightChan := make(chan bool)
 
 	for _, u := range urls {
-        inflight++
-        go doCrawl(u, depth-1, fetcher, visited, inflightChan)
+		inflight++
+		go doCrawl(u, depth-1, fetcher, visited, inflightChan)
 	}
 
-    for ; inflight > 0; inflight-- {
-        <- inflightChan
-    }
+	for ; inflight > 0; inflight-- {
+		<-inflightChan
+	}
 
-    finished <- true
+	finished <- true
 }
 
 func alreadyVisited(candidateUrl string, visited []string) bool {
